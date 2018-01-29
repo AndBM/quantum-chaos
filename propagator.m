@@ -1,38 +1,3 @@
-% Note that total spin is both F and j.
-
-% Check the kappa=0 results, maybe fine if they don't match article since
-% article includes experimental stuff.
-
-% Just make the figures and finish the report.
-
-% kappa=0 results don't match old results. It seems like the push is acting
-% differently?? Also the chaos measure seems to be off for the old data.
-% You could check the amplitude in f(t). Or maybe just accept that the new
-% stuff is correct?
-
-% Allow interpolation and free time resolution?
-
-% Check if kappa != 0 gives mixed states
-
-% Sometimes Tr(rho^2) > 1, this is numerical effect. It's a pure state all
-% the way.
-
-% I think dW now better implemented, but still pretty non-differentiable.
-% Maybe smoothen out or something?
-
-% To do:
-% X TEST MEASUREMENT IMPLEMENTATION
-% - Experiment with different gauss widths?
-% X Implement strict chaos signatures?
-% X Implement weak measurement
-% X Test relation between measurement strength and chaos
-% X Check with husimi dists that the spin length measure is correct.
-    %- Husimi checks out, but lengths don't...
-% - Stuff that Mølmer said
-% - randomData0 is strangely homogeneous.
-% - Spin-½ not constant for non-zero kappa
-% - Spin coherence test shows states pretty different from coherent states
-
 function propagator()
 set(0, 'DefaultTextInterpreter', 'latex');
 set(0, 'defaultAxesTickLabelInterpreter','latex');
@@ -46,136 +11,84 @@ close all;
 %------------------------- Settings
 % Hamiltonian dynamics
 F = 3;                  % Spin
-p = 0.99;               % Angle
+p = -0.99;              % Angle
 k = 2;                  % Degree of chaos
 tau = 1;                % "Pushing" period
 eta = 1;                % Detector efficiency
-kappa = 0;           % Probe field strength
+kappa = 0;          % Probe field strength
 
 % Numerics
 endt = 41;              % Timespan (or number of periods if tau = 1)
-res = 100;              % Resolution of plot
-tres = 'Free'; %endt*100+1;       % Time resolution of ODE
+res = 100;              % Resolution of Husimi plot
+tres = 'Free';          % Time resolution of ODE
                         % (if tres is 'Free' ODE45 chooses its own resolution)
                         % (this can lead to strange animations)
-                        % (this messes with dW)
-calcNew = 0;            % Calculate new data? 1 yes, 0 no.
-folder = 'randomData0/';% Load from folder if no new calculation
-N = 100;    % Number of husimi-distributions to calculate.
+N = 100;                % Number of husimi-distributions to calculate.
                         % If (0 < N < tres) is false, N becomes tres (all are
                         % calculated)
 dWstep = 1e-5;
-seed = 4;               % Set random seed.
+seed = 3;               % Set random seed.
 rng(seed,'twister')
 
 % Set initial state
-Fs1 = [0.7, 0.7, -0.16];         % Order islands
-Fs2 = [-0.94, -0.31, -0.16];   % Chaos sea 2
+Fs = [0.7, 0.7, -0.16];         % Order islands
+%Fs = [-0.94, -0.31, -0.16];   % Chaos sea 2
 % Fs = [-0.94, 0.31, -0.16];    % Chaos sea (not)
-Fs = [0, -0.99, -0.16];       % Major island
-rho = setInit(F, Fs(1), Fs(2), Fs(3));
-rho01 = setInit(F, Fs1(1), Fs1(2), Fs1(3));
-rho02 = setInit(F, Fs2(1), Fs2(2), Fs2(3));
+%Fs = [0, -0.99, -0.16];       % Major island
+rho0 = setInit(F, Fs(1), Fs(2), Fs(3));
 
 %-------------------------
 
 % Propagate according to the relevant master eq.
 
-%TEST IF SPIN-½ IS CONSTANT
-rho0 = setInit(F, 0, 0, 1);
 disp('Propagating...')
-[rhos, t] = propagate(F, rho01, tres, p, k, tau, endt, eta, kappa, dWstep);
+[rhos, t] = propagate(F, rho0, tres, p, k, tau, endt, eta, kappa, dWstep);
 toc
 wienerCheck(t,dWstep);
 spinvec(rhos, endt)
-%testCoherence(rhos,t)
+%plotJx(seed, rhos, t, F, dWstep, endt, eta, kappa)
 % Calculate relevant Husimi distributions and save everything
 disp('Calculating Husimi distributions...')
 Qs = husimi(rhos, res, t, F, N);
-animator(Qs,res,endt,tau);
-%meanplot(Qs,res);
-% toc
+% animator(Qs,res,endt,tau);
+% meanplot(Qs,res);
 % save(datestr8601);
-
-  
-% else
-%     % Load data from a previous calculation
-%     figure
-%     hold on
-%     files = dir(folder);
-%     for i = 1:10
-%         filename = [folder files(i+2).name];
-%         load(filename)
-%         %spinvec(rhos, endt)
-%     end
-%     legend('\kappa = 0', '\kappa = 0.05', '\kappa = 0.25', '\kappa = 0.5',...
-%            '\kappa = 0.75', '\kappa = 1', 'Location', 'Northeast')
-%     title('Purity measure, chaos sea')
-% end
-% else
-%     % Load data from a previous calculation
-%     figure
-%     for i = [1 2 6 11 16 21]
-%         filename = ['kappa' num2str((i-1)*5)];
-%         load(filename)
-%         spinvec(rhos, endt, kappa(i))
-%     end
-%     legend('\kappa = 0', '\kappa = 0.05', '\kappa = 0.25', '\kappa = 0.5',...
-%            '\kappa = 0.75', '\kappa = 1', 'Location', 'East')
-%     title('Purity measure, order islands')
-% end
 
 
 toc
 %------------------------- Main function end.
 
-function testCoherence(rhos,t)
-% Subtract ket*bra from rho, should be zero if spin coherent state
-
-F = (size(rhos,1)-1)/2;
-N = size(rhos,3);
-rhoDiff = zeros(1,N);
-cohRho = zeros(size(rhos));
-
-for i = 1:N
-    X = trace(rhos(:,:,i)*Sx(F));
-    Y = trace(rhos(:,:,i)*Sy(F));
-    Z = trace(rhos(:,:,i)*Sz(F));
-    [theta, elev] = cart2sph(X, Y, Z);
-    phi = pi/2 - elev;
-    ket = expand(theta, phi, F);
-    bra = ket';
-    cohRho(:,:,i) = ket*bra;
-    rhoDiff(i) = sum(sum(abs(rhos(:,:,i) - ket*bra)))/sum(sum(rhos(:,:,i)));
-end
-
-cohQ = husimi(cohRho, 100, t, F, 0);
-
-figure
-animator(cohQ, 100, 41, 1)
-figure
-plot(rhoDiff)
-
-function plotJx(seed, rhos, t, F)
+function plotJx(seed, rhos, t, F, dWstep, endt, eta, kappa)
 % Reset random number generator and recreate dWs
 rng(seed,'twister');
-dWs = randn(size(t));
+
+dts = [0 diff(t)'];
+% Generate Wiener process
+Wtimes = dts;
+dW = dts.*randn(size(Wtimes));
+
+Wtimes = 0:dWstep:endt;
+dW = dWstep*randn(size(Wtimes));
+Wt = griddedInterpolant(Wtimes, [0 cumsum(dW(2:end))]);
 
 Jxs = zeros(size(t));
 Sxs = Jxs;
 
 % Define Jx
-for i = 1:length(t)
-    avSx = trace(rhos(:,:,i)*Sx(F));
+for i = 2:length(t)
+    dt = t(i) - t(i-1);
+    avSx = real(trace(rhos(:,:,i)*Sx(F)));
     Sxs(i) = avSx;
-    Jxs(i) = avSx + dWs(i);
+    Jxs(i) = avSx + (Wt(t(i))-Wt(t(i-1)))/(2*sqrt(eta*kappa)*dt);
 end
 
+X = linspace(0,endt,length(t));
 figure; hold on;
-plot(t, Sxs, '--')
-plot(t, Jxs)
-xlabel('t')
-legend('<S_x>','J_x')
+plot(t, Jxs,'r-')
+plot(t, Sxs, 'k-')
+xlabel('Period number')
+ylabel('V(t)')
+legend('$J_x$','$\langle S_x \rangle$')
 
 function covariance(F, N, rhos)
 covars = zeros(3, 3, N);
@@ -196,53 +109,54 @@ for k = 1:N
     end
     [eigvecs(:,:,k), eigvals(:,:,k)] = eig(covars(:,:,k));
 end
-disp('lol')
 
 function spinvec(rhos, endt)
 F = (size(rhos,1)-1)/2;
 N = size(rhos,3);
-lengths = zeros(1,N);
 spinvecs = zeros(3,N);
+squared = zeros(3,N);
 
 for i = 1:N
-    spinvec = [trace(rhos(:,:,i)*Sx(F))
+    spinvecs(:,i) = [trace(rhos(:,:,i)*Sx(F))
                trace(rhos(:,:,i)*Sy(F))
                trace(rhos(:,:,i)*Sz(F))];
-    spinvecs(:,i) = spinvec;
-    lengths(i) = norm(spinvec);
+    squared(:,i) = [trace(rhos(:,:,i)*Sx(F)^2)
+               trace(rhos(:,:,i)*Sy(F)^2)
+               trace(rhos(:,:,i)*Sz(F)^2)];
 end
 
 if max(max(imag(spinvecs))) > 1e-12
     disp('Warning: "spinvecs" has significant imaginary parts (>1e-12)')
 end
 spinvecs = real(spinvecs);
-vars = sum(sum(var(spinvecs')));
-disp(vars)
+squared = real(squared);
+vars = squared - spinvecs.^2;
+disp(mean(sum(vars)))
 
 for i=1:length(rhos)
-    toplot(i)=trace(rhos(:,:,i)^2);
+    purity(i)=trace(rhos(:,:,i)^2);
 end
 
 figure; hold on
 X = linspace(0,endt,N);
-plot(X,lengths)
+plot(X,sum(vars))
 xlabel('Period number')
-ylabel('Measure')
-%ylabel('|(\langle F_x \rangle, \langle F_y \rangle, \langle F_z \rangle) |')
-%axis([0 endt 0 F+0.1])
+ylabel('$\sigma(F_x)^2 + \sigma(F_y)^2 + \sigma(F_z)^2$')
 
 figure; hold on;
 plot(X,spinvecs(1,:),'b-')
 plot(X,spinvecs(2,:),'k-.')
 plot(X,spinvecs(3,:),'r--')
+xlabel('Period number')
+ylabel('Expectation value')
 
-legend('Sx','Sy','Sz')
+legend('$F_x$','$F_y$','$F_z$')
 
 figure; hold on
-plot(real(toplot))
-xlabel('t')
+plot(X, real(purity))
+xlabel('Period number')
 ylabel('Tr($\rho^2$)')
-axis([0 length(toplot) 0 max(real(toplot))+0.1]);
+axis([0 max(X) 0 max(real(purity))+0.1]);
 
 function animator(Qs,res,endt,tau)
 % Animate Q on a sphere
@@ -289,8 +203,6 @@ function meanplot(Qs, res)
 Q = mean(Qs,3);
 
 figure
-%set(gcf,'position',[3102 1143 662 316])
-
 subplot(1,2,1)
 sphereplot(Q, res, 0);
 title('$F_y < 0$'); xlabel('$F_x/F$'); ylabel('$F_y/F$'); zlabel('$F_z/F$');
@@ -372,9 +284,8 @@ end
 
 % Generate Wiener process
 Wtimes = 0:dWstep:endt;
-dW = dWstep^2*randn(size(Wtimes)); % Multiply by dt^2 and divide by dt.
+dW = dWstep*randn(size(Wtimes)); % Multiply by dt^2 and divide by dt.
 Wt = griddedInterpolant(Wtimes, [0 cumsum(dW(2:end))]);
-%[Wt; 0 cumsum(dW(2:end))]';
 % W_0 = 0, so start at i = 2
 
 % Solve the differential equation for the density
@@ -388,7 +299,7 @@ rhos = reshape(y.',2*F+1,2*F+1,[]); %... and back into matrix
 function result = dRhodt(t, y, F, p, k, tau, eta, kappa, Wt)
 % Differential equation for density
 
-% Interpolate Wiener process
+% Get dWt
 dW = Wt(t);
 
 % Reshape y into matrix
@@ -422,7 +333,7 @@ rho(1:n+1:n*n) = real(diag(rho)); % Remove imaginary residue
 rho = 1/trace(rho) * rho; % Renormalize rho
 
 function result = operatorD(a, rho)
-result = a*rho*a' - 1/2*( a'*a * rho + rho * a'*a );
+result = a*rho*a' - 1/2*( (a'*a) * rho + rho * (a'*a) );
 
 function result = operatorH(a, rho)
 result = a*rho + rho*a' - trace( a*rho + rho*a' )*rho;
@@ -435,15 +346,11 @@ result = dt*randn(); % Multiply by dt^2 and divide by dt.
 
 function result = f(t,tau)
 % "Push" the top with f
-a = 1; % Amplitude
 c = tau/40; % Width
 x = mod(t,tau);
 
-% Gaussian is in the middle of periodic interval
-%result = 1/(c*sqrt(2*pi)) * exp(-x.^2/(2*c^2));
+% Normalized Gaussian is in the middle of periodic interval
 result = 1/(c*sqrt(2*pi)) * exp(-(x-tau/2).^2/(2*c^2));
-%result = a * exp(-x.^2/(2*c^2));
-%result = a * exp(-(x-tau/2).^2/(2*c^2));
 
 function state = expand(theta, phi, j, binomial)
 % Expand spin coherent state in spin eigenstates
