@@ -1,3 +1,3 @@
 # quantum-chaos
 
-Read the report for details.
+Unfinished project on modelling chaos in quantum systems. Read the report for details.
